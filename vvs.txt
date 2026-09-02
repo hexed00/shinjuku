@@ -1,0 +1,121 @@
+-- FINAL BEST Anti Lock
+-- never dies from lag or standing still
+-- safe numbers + forced constant
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+
+local LocalPlayer = Players.LocalPlayer
+local AntiLockEnabled = false
+local Connection = nil
+local HeartbeatConnection = nil
+
+local function notify(text)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Anti Lock",
+            Text = text,
+            Duration = 2.5
+        })
+    end)
+    print("[Anti Lock] " .. text)
+end
+
+local function getRoot()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function doDesync()
+    local root = getRoot()
+    if not root then return end
+
+    local oldVel = root.AssemblyLinearVelocity
+
+    -- safe + strong azure style
+    root.AssemblyLinearVelocity = Vector3.new(
+        math.random(-13500, 13500),
+        math.random(-9000, 11000),
+        math.random(-13500, 13500)
+    )
+
+    RunService.RenderStepped:Wait()
+    root.AssemblyLinearVelocity = oldVel
+end
+
+local function startAntiLock()
+    if Connection then
+        Connection:Disconnect()
+        Connection = nil
+    end
+
+    Connection = RunService.Heartbeat:Connect(function()
+        if AntiLockEnabled then
+            doDesync()
+        end
+    end)
+end
+
+local function stopAntiLock()
+    if Connection then
+        Connection:Disconnect()
+        Connection = nil
+    end
+end
+
+-- watchdog that forces it to stay alive
+HeartbeatConnection = RunService.Heartbeat:Connect(function()
+    if AntiLockEnabled then
+        -- if the main connection somehow died, restart it
+        if not Connection or not Connection.Connected then
+            startAntiLock()
+        end
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.V then
+        AntiLockEnabled = not AntiLockEnabled
+
+        if AntiLockEnabled then
+            startAntiLock()
+            notify("ON • Forced Constant")
+        else
+            stopAntiLock()
+            notify("OFF")
+        end
+    end
+end)
+
+-- keep alive on respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    if AntiLockEnabled then
+        task.wait(0.6)
+        startAntiLock()
+    end
+end)
+
+-- only turn off on death
+local function onCharacterAdded(char)
+    local humanoid = char:WaitForChild("Humanoid", 5)
+    if humanoid then
+        humanoid.Died:Connect(function()
+            if AntiLockEnabled then
+                AntiLockEnabled = false
+                stopAntiLock()
+                notify("OFF • Died")
+            end
+        end)
+    end
+end
+
+if LocalPlayer.Character then
+    onCharacterAdded(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+notify("Loaded • Press V | Never dies from lag/standstill")
