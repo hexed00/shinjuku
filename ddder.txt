@@ -1,0 +1,2006 @@
+local ownerName = _G.BotOwner or "das_hood0003"
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local GunHandler = require(ReplicatedStorage.Modules.GunHandler)
+local MainModule = require(ReplicatedStorage.MainModule)
+local oldGetAim = GunHandler.GetAim
+local originalIgnored = MainModule.Ignored
+local safeModeActive = false
+local safeModeAttacker = nil
+local safeModeHealthConn = nil
+local safeModeCharConn = nil
+local safeModeTargetName = ""
+local safeModeGui = nil
+local safeModeLabel = nil
+local safeModeHideToken = 0
+local ModifiedTools = {}
+local function setupFullAuto(tool)
+    if ModifiedTools[tool] or not tool:FindFirstChild("GunScript") then return end
+    local connections = getconnections(tool.Activated)
+    for _, conn in ipairs(connections) do
+        local func = conn.Function
+        local info = debug.getinfo(func)
+        for i = 1, (info.nups or 0) do
+            local val = debug.getupvalue(func, i)
+            if type(val) == "number" and val > 0 and val < 0.5 then
+                debug.setupvalue(func, i, 0)
+            end
+        end
+    end
+    ModifiedTools[tool] = true
+end
+RunService.RenderStepped:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        setupFullAuto(tool)
+        if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+            tool:Activate()
+        end
+    end
+end)
+local TweenService = game:GetService("TweenService")
+if LocalPlayer.PlayerGui:FindFirstChild("BotLogsGui") then
+    LocalPlayer.PlayerGui.BotLogsGui:Destroy()
+end
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BotLogsGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "bot_logs"
+MainFrame.Size = UDim2.new(0, 320, 0, 260)
+MainFrame.Position = UDim2.new(0, 20, 0, 20)
+MainFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 8)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Color = Color3.fromRGB(0, 255, 140)
+UIStroke.Thickness = 1
+UIStroke.Transparency = 0.4
+UIStroke.Parent = MainFrame
+local Gradient = Instance.new("UIGradient")
+Gradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 15, 15)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 5, 5))
+})
+Gradient.Rotation = 90
+Gradient.Parent = MainFrame
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 28)
+TitleBar.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+TitleBar.BorderSizePixel = 0
+TitleBar.ZIndex = 2
+TitleBar.Parent = MainFrame
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.Parent = TitleBar
+local TitleFix = Instance.new("Frame")
+TitleFix.Size = UDim2.new(1, 0, 0, 10)
+TitleFix.Position = UDim2.new(0, 0, 1, -10)
+TitleFix.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+TitleFix.BorderSizePixel = 0
+TitleFix.ZIndex = 2
+TitleFix.Parent = TitleBar
+local StatusDot = Instance.new("Frame")
+StatusDot.Size = UDim2.new(0, 8, 0, 8)
+StatusDot.Position = UDim2.new(0, 10, 0.5, -4)
+StatusDot.BackgroundColor3 = Color3.fromRGB(0, 255, 140)
+StatusDot.BorderSizePixel = 0
+StatusDot.ZIndex = 3
+StatusDot.Parent = TitleBar
+local DotCorner = Instance.new("UICorner")
+DotCorner.CornerRadius = UDim.new(1, 0)
+DotCorner.Parent = StatusDot
+task.spawn(function()
+    while StatusDot.Parent do
+        local tw1 = TweenService:Create(StatusDot, TweenInfo.new(1), {BackgroundTransparency = 0.6})
+        tw1:Play(); tw1.Completed:Wait()
+        local tw2 = TweenService:Create(StatusDot, TweenInfo.new(1), {BackgroundTransparency = 0})
+        tw2:Play(); tw2.Completed:Wait()
+    end
+end)
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -140, 1, 0)
+TitleLabel.Position = UDim2.new(0, 26, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Bot Logs"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 14
+TitleLabel.ZIndex = 3
+TitleLabel.Parent = TitleBar
+local LineCounterLabel = Instance.new("TextLabel")
+LineCounterLabel.Name = "LineCounter"
+LineCounterLabel.Size = UDim2.new(0, 40, 1, 0)
+LineCounterLabel.Position = UDim2.new(1, -108, 0, 0)
+LineCounterLabel.BackgroundTransparency = 1
+LineCounterLabel.Text = "0"
+LineCounterLabel.TextColor3 = Color3.fromRGB(110, 110, 110)
+LineCounterLabel.Font = Enum.Font.Code
+LineCounterLabel.TextSize = 12
+LineCounterLabel.ZIndex = 3
+LineCounterLabel.Parent = TitleBar
+local function makeTitleButton(text, xOffset, size)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 20, 0, 20)
+    btn.Position = UDim2.new(1, xOffset, 0.5, -10)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.Text = text
+    btn.TextSize = size or 12
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.ZIndex = 3
+    btn.AutoButtonColor = false
+    btn.Parent = TitleBar
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 5)
+    c.Parent = btn
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(0, 255, 140)}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.15), {TextColor3 = Color3.fromRGB(0,0,0)}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.15), {TextColor3 = Color3.fromRGB(255,255,255)}):Play()
+    end)
+    return btn
+end
+local CopyBtn = makeTitleButton("⧉", -78, 11)
+local ClearBtn = makeTitleButton("🗑", -52, 11)
+local MinBtn = makeTitleButton("—", -26, 14)
+local SearchBox = Instance.new("TextBox")
+SearchBox.Size = UDim2.new(1, -12, 0, 22)
+SearchBox.Position = UDim2.new(0, 6, 0, 32)
+SearchBox.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+SearchBox.PlaceholderText = "Filter logs..."
+SearchBox.PlaceholderColor3 = Color3.fromRGB(90, 90, 90)
+SearchBox.Text = ""
+SearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+SearchBox.Font = Enum.Font.Code
+SearchBox.TextSize = 12
+SearchBox.ClearTextOnFocus = false
+SearchBox.Parent = MainFrame
+local SearchCorner = Instance.new("UICorner")
+SearchCorner.CornerRadius = UDim.new(0, 5)
+SearchCorner.Parent = SearchBox
+local SearchPad = Instance.new("UIPadding")
+SearchPad.PaddingLeft = UDim.new(0, 8)
+SearchPad.Parent = SearchBox
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Name = "LogScroll"
+ScrollFrame.Size = UDim2.new(1, -12, 1, -94)
+ScrollFrame.Position = UDim2.new(0, 6, 0, 60)
+ScrollFrame.BackgroundColor3 = Color3.fromRGB(4, 4, 4)
+ScrollFrame.BackgroundTransparency = 0.3
+ScrollFrame.BorderSizePixel = 0
+ScrollFrame.ScrollBarThickness = 3
+ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(0, 255, 140)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ScrollFrame.Parent = MainFrame
+local ScrollCorner = Instance.new("UICorner")
+ScrollCorner.CornerRadius = UDim.new(0, 5)
+ScrollCorner.Parent = ScrollFrame
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 2)
+UIListLayout.Parent = ScrollFrame
+local UIPadding = Instance.new("UIPadding")
+UIPadding.PaddingTop = UDim.new(0, 4)
+UIPadding.PaddingLeft = UDim.new(0, 4)
+UIPadding.Parent = ScrollFrame
+local ResizeHandle = Instance.new("Frame")
+ResizeHandle.Size = UDim2.new(0, 14, 0, 14)
+ResizeHandle.Position = UDim2.new(1, -16, 1, -16)
+ResizeHandle.BackgroundTransparency = 1
+ResizeHandle.ZIndex = 5
+ResizeHandle.Parent = MainFrame
+local ResizeIcon = Instance.new("TextLabel")
+ResizeIcon.Size = UDim2.new(1, 0, 1, 0)
+ResizeIcon.BackgroundTransparency = 1
+ResizeIcon.Text = "◢"
+ResizeIcon.TextColor3 = Color3.fromRGB(0, 255, 140)
+ResizeIcon.TextTransparency = 0.4
+ResizeIcon.Font = Enum.Font.GothamBold
+ResizeIcon.TextSize = 12
+ResizeIcon.ZIndex = 5
+ResizeIcon.Parent = ResizeHandle
+do
+    local resizing = false
+    local startPos, startSize
+    ResizeHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            resizing = true
+            startPos = UserInputService:GetMouseLocation()
+            startSize = MainFrame.Size
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = UserInputService:GetMouseLocation() - startPos
+            local newW = math.clamp(startSize.X.Offset + delta.X, 240, 600)
+            local newH = math.clamp(startSize.Y.Offset + delta.Y, 120, 500)
+            MainFrame.Size = UDim2.new(0, newW, 0, newH)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            resizing = false
+        end
+    end)
+end
+local lineCount = 0
+local MAX_LINES = 200
+local minimized = false
+local originalSize = MainFrame.Size
+local allEntries = {}
+local LOG_TYPES = {
+    info  = {color = Color3.fromRGB(0, 255, 140), icon = "●"},
+    warn  = {color = Color3.fromRGB(255, 200, 0), icon = "▲"},
+    error = {color = Color3.fromRGB(255, 70, 70), icon = "✖"},
+}
+local function updateCounter()
+    LineCounterLabel.Text = tostring(lineCount)
+end
+local function AddLog(text, logType)
+    logType = logType or "info"
+    local style = LOG_TYPES[logType] or LOG_TYPES.info
+    lineCount = lineCount + 1
+    updateCounter()
+    local entry = Instance.new("Frame")
+    entry.Name = "Line_" .. lineCount
+    entry.Size = UDim2.new(1, -4, 0, 16)
+    entry.BackgroundTransparency = 1
+    entry.LayoutOrder = lineCount
+    entry.Parent = ScrollFrame
+    local iconLabel = Instance.new("TextLabel")
+    iconLabel.Size = UDim2.new(0, 14, 1, 0)
+    iconLabel.BackgroundTransparency = 1
+    iconLabel.Text = style.icon
+    iconLabel.TextColor3 = style.color
+    iconLabel.Font = Enum.Font.GothamBold
+    iconLabel.TextSize = 10
+    iconLabel.Parent = entry
+    local timeLabel = Instance.new("TextLabel")
+    timeLabel.Size = UDim2.new(0, 52, 1, 0)
+    timeLabel.Position = UDim2.new(0, 16, 0, 0)
+    timeLabel.BackgroundTransparency = 1
+    timeLabel.Text = os.date("%H:%M:%S")
+    timeLabel.TextColor3 = Color3.fromRGB(90, 90, 90)
+    timeLabel.Font = Enum.Font.Code
+    timeLabel.TextSize = 11
+    timeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    timeLabel.Parent = entry
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, -68, 1, 0)
+    textLabel.Position = UDim2.new(0, 68, 0, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = text
+    textLabel.TextColor3 = style.color
+    textLabel.Font = Enum.Font.Code
+    textLabel.TextSize = 12
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    textLabel.TextWrapped = true
+    textLabel.Parent = entry
+    table.insert(allEntries, {frame = entry, text = text:lower()})
+    task.wait()
+    ScrollFrame.CanvasPosition = Vector2.new(0, ScrollFrame.AbsoluteCanvasSize.Y)
+    if lineCount > MAX_LINES then
+        local oldest = ScrollFrame:FindFirstChild("Line_" .. (lineCount - MAX_LINES))
+        if oldest then oldest:Destroy() end
+        table.remove(allEntries, 1)
+    end
+end
+SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local query = SearchBox.Text:lower()
+    for _, e in ipairs(allEntries) do
+        if e.frame.Parent then
+            e.frame.Visible = (query == "" or e.text:find(query, 1, true) ~= nil)
+        end
+    end
+end)
+ClearBtn.MouseButton1Click:Connect(function()
+    for _, child in ipairs(ScrollFrame:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    lineCount = 0
+    allEntries = {}
+    updateCounter()
+end)
+CopyBtn.MouseButton1Click:Connect(function()
+    local lines = {}
+    for _, e in ipairs(allEntries) do
+        table.insert(lines, e.text)
+    end
+    local joined = table.concat(lines, "\n")
+    if setclipboard then
+        pcall(setclipboard, joined)
+        AddLog("Logs copied to clipboard", "info")
+    else
+        AddLog("Clipboard not supported by executor", "warn")
+    end
+end)
+MinBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {Size = UDim2.new(0, originalSize.X.Offset, 0, 28)}):Play()
+        MinBtn.Text = "+"
+        SearchBox.Visible = false
+        ScrollFrame.Visible = false
+        ResizeHandle.Visible = false
+    else
+        TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {Size = originalSize}):Play()
+        MinBtn.Text = "—"
+        SearchBox.Visible = true
+        ScrollFrame.Visible = true
+        ResizeHandle.Visible = true
+    end
+end)
+_G.AddBotLog = AddLog
+AddLog("Bot Logs GUI ready", "info")
+AddLog("Owner set to: " .. ownerName, "info")
+AddLog("No Cooldown (Full Auto) Active", "info")
+AddLog("Protected: Cannot target owner or self", "info")
+AddLog("Commands: All commands loaded", "info")
+local function sendChat(msg)
+    pcall(function()
+        local textService = game:GetService("TextChatService")
+        local channel = textService:FindFirstChild("TextChannels") and textService.TextChannels:FindFirstChild("RBXGeneral")
+        if channel then
+            channel:SendAsync(msg)
+        else
+            local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+            if chatEvents then
+                local sayReq = chatEvents:FindFirstChild("SayMessageRequest")
+                if sayReq then
+                    sayReq:FireServer(msg, "All")
+                end
+            end
+        end
+    end)
+end
+local MAP_FOLDER_NAME = "MAP"
+local IGNORED_FOLDER_NAME = "Ignored"
+local function setWallbang(enabled)
+    if enabled then
+        local mapFolder = workspace:FindFirstChild(MAP_FOLDER_NAME)
+        local ignoredFolder = workspace:FindFirstChild(IGNORED_FOLDER_NAME)
+        local newIgnored = {}
+        if mapFolder then table.insert(newIgnored, mapFolder) end
+        if ignoredFolder then table.insert(newIgnored, ignoredFolder) end
+        MainModule.Ignored = newIgnored
+    else
+        MainModule.Ignored = originalIgnored
+    end
+end
+local SUMMON_ANIM_IDS = {
+    STAND_IDLE = "rbxassetid://133330377145015",
+    STAND_WALK = "rbxassetid://123349905320515",
+    SUMMON_START = "rbxassetid://84289147684815",
+    SUMMON_END = "rbxassetid://84289147684815"
+}
+local flingAuraEnabled = false
+local flingMode = 1
+local flingAuraRadius = 25
+local flingAuraCooldowns = {}
+local flingAuraConnection = nil
+local flingMode2Thread = nil
+local flingMode2Running = false
+local targetFlingActive = false
+local targetFlingThread = nil
+local targetFlingPlayer = nil
+local killActive = false
+local killTargetName = ""
+local orbitConnection = nil
+local orbitBodyPos = nil
+local orbitBodyGyro = nil
+local killTargetHighlight = nil
+local killTargetConn = nil
+local killWaiting = false
+local killWaitingThread = nil
+local killAuraActive = false
+local killAuraRange = 20
+local killAuraTarget = nil
+local killAuraOrbitConn = nil
+local killAuraBodyPos = nil
+local killAuraBodyGyro = nil
+local killAuraLoopThread = nil
+local bringActive = false
+local bringTargetName = ""
+local bringOrbitConn = nil
+local bringBodyPos = nil
+local bringBodyGyro = nil
+local summonActive = false
+local summonConnection = nil
+local summonBodyPos = nil
+local summonBodyGyro = nil
+local summonAnimTrack = nil
+local summonIdleTrack = nil
+local summonWalkTrack = nil
+local currentGunMode = "Revolver"
+local function findPlayer(searchLower)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower() == searchLower or p.DisplayName:lower() == searchLower then return p end
+    end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower():sub(1, #searchLower) == searchLower or p.DisplayName:lower():sub(1, #searchLower) == searchLower then return p end
+    end
+    return nil
+end
+local function waitForCharacter()
+    repeat task.wait() until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+end
+local function setNoclip(character)
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then part.CanCollide = false end
+    end
+end
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.5)
+    setNoclip(char)
+end)
+local function teleportToOwner()
+    local owner = findPlayer(ownerName:lower())
+    if not owner or not owner.Character then return end
+    local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
+    if not ownerRoot then return end
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if myRoot then myRoot.CFrame = ownerRoot.CFrame + Vector3.new(2, 0, 0) end
+end
+local function resetBot()
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    local hum = myChar:FindFirstChildOfClass("Humanoid")
+    if hum then hum.Health = 0 end
+end
+local function ShootCurrentWeapon()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then return false end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health <= 0 then return false end
+    local ammo = tool:FindFirstChild("Ammo")
+    if ammo and ammo.Value <= 0 then return false end
+    pcall(function() tool:Activate() end)
+    return true
+end
+local function equipRevolver()
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if not backpack then return false end
+    local revolver = backpack:FindFirstChild("[Revolver]")
+    if revolver and revolver:IsA("Tool") then
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChild("Humanoid")
+            if hum then hum:EquipTool(revolver) return true end
+        end
+    end
+    return false
+end
+local function equipShotgun()
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if not backpack then return false end
+    local shotgun = backpack:FindFirstChild("[TacticalShotgun]")
+    if shotgun and shotgun:IsA("Tool") then
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChild("Humanoid")
+            if hum then hum:EquipTool(shotgun) return true end
+        end
+    end
+    return false
+end
+local function equipCurrentGun()
+    if currentGunMode == "Revolver" then
+        return equipRevolver()
+    elseif currentGunMode == "TacticalShotgun" then
+        return equipShotgun()
+    end
+    return false
+end
+local function playSummonAnim(hum, animationId, speed, looped, priority, fadeTime)
+    if not hum or not hum.Animator then return nil end
+    local anim = Instance.new("Animation")
+    anim.AnimationId = animationId
+    local track = hum.Animator:LoadAnimation(anim)
+    if not track then return nil end
+    track.Looped = (looped == true)
+    if priority then
+        track.Priority = priority
+    end
+    track:Play(fadeTime or 0.3)
+    if speed then
+        track:AdjustSpeed(speed)
+    end
+    return track
+end
+local function stopSummonAnims()
+    if summonAnimTrack then
+        pcall(function() summonAnimTrack:Stop(0.1) end)
+        summonAnimTrack = nil
+    end
+    if summonIdleTrack then
+        pcall(function() summonIdleTrack:Stop(0.1) end)
+        summonIdleTrack = nil
+    end
+    if summonWalkTrack then
+        pcall(function() summonWalkTrack:Stop(0.1) end)
+        summonWalkTrack = nil
+    end
+end
+local function stopTargetFling()
+    targetFlingActive = false
+    if targetFlingThread then task.cancel(targetFlingThread); targetFlingThread = nil end
+    targetFlingPlayer = nil
+end
+local function startTargetFling(playerName)
+    stopTargetFling()
+    local target = findPlayer(playerName:lower())
+    if not target then
+        _G.AddBotLog("Player " .. playerName .. " not found", "warn")
+        sendChat("❌ Player " .. playerName .. " not found")
+        return
+    end
+    if target.Name:lower() == ownerName:lower() or target.DisplayName:lower() == ownerName:lower() then
+        _G.AddBotLog("Cannot fling owner", "warn")
+        sendChat("❌ Cannot fling owner")
+        return
+    end
+    targetFlingPlayer = target
+    targetFlingActive = true
+    if flingMode == 1 then
+        targetFlingThread = task.spawn(function()
+            while targetFlingActive do
+                if not target or not target.Character then
+                    target = findPlayer(playerName:lower())
+                    if not target or not target.Character then task.wait(1); break end
+                end
+                local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+                local targetHum = target.Character:FindFirstChildOfClass("Humanoid")
+                if not targetHRP or not targetHum or targetHum.Health <= 0 then task.wait(0.5); break end
+                local botChar = LocalPlayer.Character
+                local botHRP = botChar and botChar:FindFirstChild("HumanoidRootPart")
+                local botHum = botChar and botChar:FindFirstChildOfClass("Humanoid")
+                if not botHRP or not botHum then task.wait(0.5); break end
+                pcall(function()
+                    local oldFPDH = workspace.FallenPartsDestroyHeight
+                    workspace.FallenPartsDestroyHeight = 0/0
+                    botHum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+                    local bv = Instance.new("BodyVelocity")
+                    bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+                    bv.Velocity = Vector3.zero
+                    bv.Parent = botHRP
+                    local angle = 0
+                    local startT = tick()
+                    while tick() - startT < 2 and targetFlingActive and target and target.Character and targetHRP and targetHRP.Parent do
+                        angle = angle + 100
+                        if targetHRP.Velocity.Magnitude < 50 then
+                            botHRP.CFrame = CFrame.new(targetHRP.Position) * CFrame.new(0, 1.5, 0) * CFrame.Angles(math.rad(angle), 0, 0)
+                            botHRP.Velocity = Vector3.new(90000, 900000, 90000)
+                            botHRP.RotVelocity = Vector3.new(900000, 900000, 900000)
+                            RunService.Heartbeat:Wait()
+                            botHRP.CFrame = CFrame.new(targetHRP.Position) * CFrame.new(0, -1.5, 0) * CFrame.Angles(math.rad(angle), 0, 0)
+                            botHRP.Velocity = Vector3.new(90000, 900000, 90000)
+                            botHRP.RotVelocity = Vector3.new(900000, 900000, 900000)
+                            RunService.Heartbeat:Wait()
+                            botHRP.CFrame = CFrame.new(targetHRP.Position) * CFrame.new(0, 1.5, 0) * CFrame.Angles(math.rad(angle), 0, 0)
+                            botHRP.Velocity = Vector3.new(90000, 900000, 90000)
+                            RunService.Heartbeat:Wait()
+                        else
+                            botHRP.CFrame = CFrame.new(targetHRP.Position) * CFrame.new(0, 1.5, targetHum.WalkSpeed) * CFrame.Angles(math.rad(90), 0, 0)
+                            botHRP.Velocity = Vector3.new(90000, 900000, 90000)
+                            botHRP.RotVelocity = Vector3.new(900000, 900000, 900000)
+                            RunService.Heartbeat:Wait()
+                            botHRP.CFrame = CFrame.new(targetHRP.Position) * CFrame.new(0, -1.5, -targetHum.WalkSpeed)
+                            botHRP.Velocity = Vector3.new(90000, 900000, 90000)
+                            RunService.Heartbeat:Wait()
+                        end
+                    end
+                    bv:Destroy()
+                    botHum:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+                    workspace.FallenPartsDestroyHeight = oldFPDH
+                end)
+                task.wait(0.5)
+            end
+            targetFlingActive = false
+        end)
+    elseif flingMode == 2 then
+        if not sethiddenproperty then
+            flingMode = 1
+            _G.AddBotLog("Mode 2 unavailable - switched to mode 1 for target fling", "warn")
+            sendChat("⚠️ Mode 2 unavailable – switched to mode 1 for target fling")
+            startTargetFling(playerName)
+            return
+        end
+        local sethp = sethiddenproperty
+        if clonefunction and type(sethp) == "function" then sethp = clonefunction(sethp) end
+        targetFlingThread = task.spawn(function()
+            while targetFlingActive do
+                if not target or not target.Character then
+                    target = findPlayer(playerName:lower())
+                    if not target or not target.Character then task.wait(1); break end
+                end
+                local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+                if not targetHRP then task.wait(0.5); break end
+                local botChar = LocalPlayer.Character
+                local botHRP = botChar and botChar:FindFirstChild("HumanoidRootPart")
+                if not botHRP then task.wait(0.5); break end
+                pcall(function()
+                    sethp(botHRP, "PhysicsRepRootPart", targetHRP)
+                    botHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 1.5, 0) * CFrame.Angles(0, math.rad(tick() * 500), 0)
+                    botHRP.Velocity = Vector3.new(99999999, 99999999, 99999999)
+                    botHRP.RotVelocity = Vector3.new(99999999, 99999999, 99999999)
+                    targetHRP.Velocity = Vector3.new(99999999, 99999999, 99999999)
+                    targetHRP.RotVelocity = Vector3.new(99999999, 99999999, 99999999)
+                end)
+                task.wait()
+            end
+            local botChar = LocalPlayer.Character
+            local botHRP = botChar and botChar:FindFirstChild("HumanoidRootPart")
+            if botHRP and sethp then pcall(function() sethp(botHRP, "PhysicsRepRootPart", nil) end) end
+            targetFlingActive = false
+        end)
+    end
+    _G.AddBotLog("Flinging " .. target.Name .. " (Mode " .. flingMode .. ")", "info")
+    sendChat("🌀 Flinging " .. target.Name .. " (Mode " .. flingMode .. ")!")
+end
+local function startFlingMode1()
+    if flingAuraConnection then flingAuraConnection:Disconnect(); flingAuraConnection = nil end
+    flingAuraEnabled = true
+    flingAuraCooldowns = {}
+    flingAuraConnection = RunService.Heartbeat:Connect(function()
+        if not flingAuraEnabled then return end
+        local owner = findPlayer(ownerName:lower())
+        if not owner or not owner.Character then return end
+        local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
+        if not ownerRoot then return end
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Name:lower() ~= ownerName:lower() and plr.Character then
+                local theirHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+                local theirHum = plr.Character:FindFirstChildOfClass("Humanoid")
+                if theirHRP and theirHum and theirHum.Health > 0 then
+                    local dist = (theirHRP.Position - ownerRoot.Position).Magnitude
+                    local lastFlung = flingAuraCooldowns[plr.Name] or 0
+                    if dist <= flingAuraRadius and tick() - lastFlung >= 2 then
+                        flingAuraCooldowns[plr.Name] = tick()
+                        task.spawn(function()
+                            pcall(function()
+                                local botChar = LocalPlayer.Character
+                                local botHRP = botChar and botChar:FindFirstChild("HumanoidRootPart")
+                                local botHum = botChar and botChar:FindFirstChildOfClass("Humanoid")
+                                if not botHRP or not botHum then return end
+                                local oldCFrame = botHRP.CFrame
+                                local oldFPDH = workspace.FallenPartsDestroyHeight
+                                workspace.FallenPartsDestroyHeight = 0/0
+                                botHum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+                                local bv = Instance.new("BodyVelocity")
+                                bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+                                bv.Velocity = Vector3.zero
+                                bv.Parent = botHRP
+                                local angle = 0
+                                local startT = tick()
+                                while tick() - startT < 1.5 do
+                                    if not theirHRP or not theirHRP.Parent then break end
+                                    if not flingAuraEnabled then break end
+                                    angle = angle + 100
+                                    if theirHRP.Velocity.Magnitude < 50 then
+                                        botHRP.CFrame = CFrame.new(theirHRP.Position) * CFrame.new(0, 1.5, 0) * CFrame.Angles(math.rad(angle), 0, 0)
+                                        botHRP.Velocity = Vector3.new(90000, 900000, 90000)
+                                        botHRP.RotVelocity = Vector3.new(900000, 900000, 900000)
+                                        RunService.Heartbeat:Wait()
+                                        botHRP.CFrame = CFrame.new(theirHRP.Position) * CFrame.new(0, -1.5, 0) * CFrame.Angles(math.rad(angle), 0, 0)
+                                        botHRP.Velocity = Vector3.new(90000, 900000, 90000)
+                                        botHRP.RotVelocity = Vector3.new(900000, 900000, 900000)
+                                        RunService.Heartbeat:Wait()
+                                        botHRP.CFrame = CFrame.new(theirHRP.Position) * CFrame.new(0, 1.5, 0) * CFrame.Angles(math.rad(angle), 0, 0)
+                                        botHRP.Velocity = Vector3.new(90000, 900000, 90000)
+                                        RunService.Heartbeat:Wait()
+                                    else
+                                        botHRP.CFrame = CFrame.new(theirHRP.Position) * CFrame.new(0, 1.5, theirHum.WalkSpeed) * CFrame.Angles(math.rad(90), 0, 0)
+                                        botHRP.Velocity = Vector3.new(90000, 900000, 90000)
+                                        botHRP.RotVelocity = Vector3.new(900000, 900000, 900000)
+                                        RunService.Heartbeat:Wait()
+                                        botHRP.CFrame = CFrame.new(theirHRP.Position) * CFrame.new(0, -1.5, -theirHum.WalkSpeed)
+                                        botHRP.Velocity = Vector3.new(90000, 900000, 90000)
+                                        RunService.Heartbeat:Wait()
+                                    end
+                                end
+                                bv:Destroy()
+                                botHum:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+                                workspace.FallenPartsDestroyHeight = oldFPDH
+                                for i = 1, 5 do
+                                    botHRP.CFrame = oldCFrame * CFrame.new(0, 0.5, 0)
+                                    botHum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                                    for _, part in pairs(botChar:GetChildren()) do
+                                        if part:IsA("BasePart") then part.Velocity = Vector3.zero; part.RotVelocity = Vector3.zero end
+                                    end
+                                    RunService.Heartbeat:Wait()
+                                end
+                            end)
+                        end)
+                    end
+                end
+            end
+        end
+    end)
+end
+local function startFlingMode2()
+    if flingMode2Thread then task.cancel(flingMode2Thread); flingMode2Thread = nil end
+    flingMode2Running = true
+    flingAuraEnabled = true
+    if not sethiddenproperty then
+        flingMode = 1
+        _G.AddBotLog("Mode 2 unavailable – falling back to mode 1", "warn")
+        sendChat("⚠️ Mode 2 unavailable – falling back to mode 1")
+        startFlingMode1()
+        return
+    end
+    local sethp = sethiddenproperty
+    if clonefunction and type(sethp) == "function" then sethp = clonefunction(sethp) end
+    flingMode2Thread = task.spawn(function()
+        while flingMode2Running do
+            local owner = findPlayer(ownerName:lower())
+            if owner and owner.Character then
+                local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
+                if ownerRoot then
+                    local myChar = LocalPlayer.Character
+                    if myChar then
+                        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+                        if myRoot then
+                            local bestTarget = nil
+                            local bestDist = flingAuraRadius
+                            for _, plr in ipairs(Players:GetPlayers()) do
+                                if plr ~= LocalPlayer and plr.Name:lower() ~= ownerName:lower() and plr.Character then
+                                    local theirHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+                                    if theirHRP then
+                                        local dist = (theirHRP.Position - ownerRoot.Position).Magnitude
+                                        if dist <= bestDist then bestDist = dist; bestTarget = theirHRP end
+                                    end
+                                end
+                            end
+                            if bestTarget then
+                                pcall(function() sethp(myRoot, "PhysicsRepRootPart", bestTarget) end)
+                                myRoot.CFrame = bestTarget.CFrame * CFrame.new(0, 1.5, 0) * CFrame.Angles(0, math.rad(tick() * 500), 0)
+                                myRoot.Velocity = Vector3.new(99999999, 99999999, 99999999)
+                                myRoot.RotVelocity = Vector3.new(99999999, 99999999, 99999999)
+                                if bestTarget.Parent then
+                                    bestTarget.Velocity = Vector3.new(99999999, 99999999, 99999999)
+                                    bestTarget.RotVelocity = Vector3.new(99999999, 99999999, 99999999)
+                                end
+                            else
+                                pcall(function() sethp(myRoot, "PhysicsRepRootPart", nil) end)
+                            end
+                        end
+                    end
+                end
+            end
+            task.wait()
+        end
+        if LocalPlayer.Character then
+            local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if root and sethp then pcall(function() sethp(root, "PhysicsRepRootPart", nil) end) end
+            root.Velocity = Vector3.zero; root.RotVelocity = Vector3.zero
+        end
+    end)
+end
+local function stopFlingAura()
+    flingAuraEnabled = false
+    flingAuraCooldowns = {}
+    if flingAuraConnection then flingAuraConnection:Disconnect(); flingAuraConnection = nil end
+    flingMode2Running = false
+    if flingMode2Thread then task.cancel(flingMode2Thread); flingMode2Thread = nil end
+    stopTargetFling()
+    if LocalPlayer.Character and sethiddenproperty then
+        local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then pcall(function() sethiddenproperty(root, "PhysicsRepRootPart", nil) end) end
+    end
+end
+local function startFlingAura()
+    stopFlingAura()
+    if flingMode == 1 then startFlingMode1() elseif flingMode == 2 then startFlingMode2() end
+    _G.AddBotLog("Fling Aura enabled (Mode " .. flingMode .. ") - Radius: " .. flingAuraRadius, "info")
+    sendChat("🌀 Fling Aura enabled (Mode " .. flingMode .. ")! Radius: " .. flingAuraRadius .. " studs")
+end
+local function createKillHighlight(player)
+    if not player.Character then return end
+    local hl = Instance.new("Highlight")
+    hl.FillColor = Color3.fromRGB(0, 255, 0)
+    hl.OutlineColor = Color3.fromRGB(0, 255, 0)
+    hl.FillTransparency = 0.3
+    hl.OutlineTransparency = 0
+    hl.Parent = player.Character
+    killTargetHighlight = hl
+end
+local function removeKillHighlight()
+    if killTargetHighlight then pcall(function() killTargetHighlight:Destroy() end); killTargetHighlight = nil end
+end
+local function disconnectTarget()
+    if killTargetConn then
+        killTargetConn:Disconnect()
+        killTargetConn = nil
+    end
+    removeKillHighlight()
+end
+local function connectTarget(targetPlayer)
+    disconnectTarget()
+    createKillHighlight(targetPlayer)
+    killTargetConn = targetPlayer.CharacterAdded:Connect(function(char)
+        if killActive and killTargetName ~= "" and targetPlayer.Name:lower() == killTargetName:lower() then
+            task.wait(0.5)
+            createKillHighlight(targetPlayer)
+        end
+    end)
+end
+local function stopOrbitLoop()
+    if orbitConnection then orbitConnection:Disconnect(); orbitConnection = nil end
+end
+local function onTargetLost()
+    stopOrbitLoop()
+    disconnectTarget()
+    killWaiting = true
+    if killWaitingThread then task.cancel(killWaitingThread) end
+    killWaitingThread = task.spawn(function()
+        while killWaiting and killActive and killTargetName ~= "" do
+            local target = findPlayer(killTargetName:lower())
+            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                killWaiting = false
+                connectTarget(target)
+                beginOrbit(target)
+                _G.AddBotLog("Re‑locked onto " .. target.Name .. " after rejoin", "info")
+                sendChat("🔫 Re‑locked onto " .. target.Name .. "!")
+                break
+            end
+            task.wait(1)
+        end
+    end)
+end
+local function beginOrbit(targetPlayer)
+    stopOrbitLoop()
+    setWallbang(true)
+    local orbitRadius = 7
+    local orbitHeight = -20
+    local orbitSpeed = 20
+    local shootCooldown = 0.03
+    local lastShot = 0
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+    setNoclip(myChar)
+    local angle = math.random() * math.pi * 2
+    orbitConnection = RunService.Heartbeat:Connect(function(dt)
+        if not killActive and not killAuraActive and not bringActive then 
+            stopOrbitLoop()
+            return 
+        end
+        if not targetPlayer or not targetPlayer.Parent then
+            _G.AddBotLog("Target " .. killTargetName .. " left the game. Waiting for rejoin...", "warn")
+            sendChat("⚠️ Target " .. killTargetName .. " left, waiting for rejoin...")
+            onTargetLost()
+            return
+        end
+        local targetChar = targetPlayer.Character
+        if not targetChar then return end
+        local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+        if not targetRoot then return end
+        local myChar = LocalPlayer.Character
+        if not myChar then return end
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+        if not myRoot then return end
+        local hum = myChar:FindFirstChildOfClass("Humanoid")
+        if hum and hum.MaxHealth > 0 then hum.Health = hum.MaxHealth end
+        if not myChar:FindFirstChildOfClass("Tool") then equipCurrentGun() end
+        setNoclip(myChar)
+        angle = angle + orbitSpeed * dt
+        local targetPos = targetRoot.Position
+        local orbitPos = targetPos + Vector3.new(
+            math.cos(angle) * orbitRadius,
+            orbitHeight + math.sin(angle * 2) * 2,
+            math.sin(angle) * orbitRadius
+        )
+        myRoot.Velocity = Vector3.zero
+        myRoot.RotVelocity = Vector3.zero
+        myRoot.CFrame = CFrame.new(orbitPos, targetPos)
+        myRoot.AssemblyLinearVelocity = Vector3.zero
+        myRoot.AssemblyAngularVelocity = Vector3.zero
+        local direction = (orbitPos - myRoot.Position)
+        if direction.Magnitude > 0.1 then
+            myRoot.Velocity = direction.Unit * 800
+        end
+        if tick() - lastShot >= shootCooldown then
+            if ShootCurrentWeapon() then lastShot = tick() end
+        end
+    end)
+end
+local function stopKill()
+    killActive = false
+    killTargetName = ""
+    stopOrbitLoop()
+    disconnectTarget()
+    killWaiting = false
+    if killWaitingThread then
+        task.cancel(killWaitingThread)
+        killWaitingThread = nil
+    end
+end
+local function startKill(playerName)
+    stopKill()
+    local target = findPlayer(playerName:lower())
+    if not target then
+        _G.AddBotLog("Player " .. playerName .. " not found", "warn")
+        sendChat("❌ Player not found")
+        return
+    end
+    if target.Name:lower() == ownerName:lower() or target == LocalPlayer then
+        _G.AddBotLog("Cannot target owner or yourself!", "warn")
+        sendChat("❌ Cannot target owner or yourself!")
+        return
+    end
+    setWallbang(true)
+    killTargetName = playerName
+    killActive = true
+    task.spawn(function()
+        waitForCharacter()
+        setNoclip(LocalPlayer.Character)
+        equipCurrentGun()
+    end)
+    connectTarget(target)
+    beginOrbit(target)
+    task.spawn(function()
+        local targetPlayer = target
+        local stompRemote = (
+            ReplicatedStorage:FindFirstChild("GameRemotes") and ReplicatedStorage.GameRemotes:FindFirstChild("MainGameEvent")
+        )
+            or (ReplicatedStorage:FindFirstChild("MainRemotes") and ReplicatedStorage.MainRemotes:FindFirstChild("MainRemoteEvent"))
+            or ReplicatedStorage:FindFirstChild("MainEvent")
+            or ReplicatedStorage:FindFirstChild("StompEvent")
+            or getgenv().StompRemote
+        while killActive do
+            while killActive do
+                if not targetPlayer or not targetPlayer.Parent then
+                    targetPlayer = findPlayer(playerName:lower())
+                    if not targetPlayer then task.wait(1) else break end
+                else break end
+            end
+            if not killActive then break end
+            local stomped = false
+            while killActive and not stomped do
+                if not targetPlayer or not targetPlayer.Parent then
+                    targetPlayer = findPlayer(playerName:lower())
+                    if not targetPlayer then break end
+                end
+                local targetChar = targetPlayer.Character
+                if targetChar then
+                    local bodyEffects = targetChar:FindFirstChild("BodyEffects")
+                    if bodyEffects then
+                        local koValue = bodyEffects:FindFirstChild("K.O")
+                        local deadValue = bodyEffects:FindFirstChild("Dead")
+                        if koValue and koValue.Value == true and deadValue and deadValue.Value == false then
+                            _G.AddBotLog("Target downed! Stomping " .. targetPlayer.Name, "info")
+                            sendChat("👟 " .. targetPlayer.Name .. " downed! Stomping...")
+                            stopOrbitLoop()
+                            task.wait(0.3)
+                            local myChar = LocalPlayer.Character
+                            if myChar then
+                                local myRoot = myChar:FindFirstChild("UpperTorso") or myChar:FindFirstChild("Torso") or myChar:FindFirstChild("HumanoidRootPart")
+                                local targetRoot = targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("Torso") or targetChar:FindFirstChild("HumanoidRootPart")
+                                if myRoot and targetRoot and stompRemote then
+                                    local savedCFrame = myRoot.CFrame
+                                    local _, myYaw, _ = myRoot.CFrame:ToOrientation()
+                                    myRoot.CFrame = CFrame.new(targetRoot.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, myYaw, 0)
+                                    local stompCount = 0
+                                    while koValue and koValue.Value == true and deadValue and deadValue.Value == false and stompCount < 50 do
+                                        if targetChar.Parent and targetRoot then
+                                            myRoot.CFrame = CFrame.new(targetRoot.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, myYaw, 0)
+                                        end
+                                        stompRemote:FireServer("Stomp")
+                                        stompCount = stompCount + 1
+                                        task.wait()
+                                    end
+                                    myRoot.CFrame = savedCFrame
+                                    myRoot.AssemblyLinearVelocity = Vector3.zero
+                                    myRoot.AssemblyAngularVelocity = Vector3.zero
+                                end
+                            end
+                            _G.AddBotLog("Stomped " .. targetPlayer.Name .. " - Waiting for respawn...", "info")
+                            sendChat("✅ " .. targetPlayer.Name .. " stomped! Waiting for respawn...")
+                            stomped = true
+                            repeat
+                                task.wait(0.5)
+                                if not killActive then break end
+                                if not targetPlayer or not targetPlayer.Parent then
+                                    targetPlayer = findPlayer(playerName:lower())
+                                end
+                            until (targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")) or not killActive
+                            if killActive and targetPlayer and targetPlayer.Character then
+                                _G.AddBotLog("Target respawned! Re-orbiting " .. targetPlayer.Name, "info")
+                                sendChat("🔄 " .. targetPlayer.Name .. " respawned! Killing again...")
+                                connectTarget(targetPlayer)
+                                beginOrbit(targetPlayer)
+                            end
+                            break
+                        end
+                    end
+                end
+                task.wait(0.3)
+            end
+            task.wait(0.5)
+        end
+    end)
+    _G.AddBotLog("Killing " .. target.Name .. " (LOOPING - Fast Orbit + Shoot + Stomp)", "info")
+    sendChat("🔫 Killing " .. target.Name .. "! (Looping until stopped)")
+end
+local function startMultiKill(targetsList)
+    stopKill()
+    killActive = true
+    setWallbang(true)
+    task.spawn(function()
+        waitForCharacter()
+        setNoclip(LocalPlayer.Character)
+        equipCurrentGun()
+        local idx = 1
+        while killActive and #targetsList > 0 do
+            local targetName = targetsList[idx]
+            local target = findPlayer(targetName:lower())
+            if target and target.Character and target.Character:FindFirstChildOfClass("Humanoid") then
+                if target.Name:lower() == ownerName:lower() or target == LocalPlayer then
+                    _G.AddBotLog("Skipping " .. targetName .. " (owner/self)", "warn")
+                    idx = idx % #targetsList + 1
+                    task.wait(0.3)
+                    continue
+                end
+                killTargetName = targetName
+                createKillHighlight(target)
+                local stomped = false
+                local stompThread = task.spawn(function()
+                    local targetPlayer = target
+                    local stompRemote = (
+                        ReplicatedStorage:FindFirstChild("GameRemotes") and ReplicatedStorage.GameRemotes:FindFirstChild("MainGameEvent")
+                    )
+                        or (ReplicatedStorage:FindFirstChild("MainRemotes") and ReplicatedStorage.MainRemotes:FindFirstChild("MainRemoteEvent"))
+                        or ReplicatedStorage:FindFirstChild("MainEvent")
+                        or ReplicatedStorage:FindFirstChild("StompEvent")
+                        or getgenv().StompRemote
+                    while killActive and not stomped do
+                        if not targetPlayer or not targetPlayer.Parent then
+                            targetPlayer = findPlayer(targetName:lower())
+                            if not targetPlayer then break end
+                        end
+                        local targetChar = targetPlayer.Character
+                        if targetChar then
+                            local bodyEffects = targetChar:FindFirstChild("BodyEffects")
+                            if bodyEffects then
+                                local koValue = bodyEffects:FindFirstChild("K.O")
+                                local deadValue = bodyEffects:FindFirstChild("Dead")
+                                if koValue and koValue.Value == true and deadValue and deadValue.Value == false then
+                                    _G.AddBotLog("Multi-target downed! Stomping " .. targetPlayer.Name, "info")
+                                    stopOrbitLoop()
+                                    task.wait(0.3)
+                                    local myChar = LocalPlayer.Character
+                                    if myChar then
+                                        local myRoot = myChar:FindFirstChild("UpperTorso") or myChar:FindFirstChild("Torso") or myChar:FindFirstChild("HumanoidRootPart")
+                                        local targetRoot = targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("Torso") or targetChar:FindFirstChild("HumanoidRootPart")
+                                        if myRoot and targetRoot and stompRemote then
+                                            local savedCFrame = myRoot.CFrame
+                                            local _, myYaw, _ = myRoot.CFrame:ToOrientation()
+                                            myRoot.CFrame = CFrame.new(targetRoot.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, myYaw, 0)
+                                            local stompCount = 0
+                                            while koValue and koValue.Value == true and deadValue and deadValue.Value == false and stompCount < 50 do
+                                                if targetChar.Parent and targetRoot then
+                                                    myRoot.CFrame = CFrame.new(targetRoot.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, myYaw, 0)
+                                                end
+                                                stompRemote:FireServer("Stomp")
+                                                stompCount = stompCount + 1
+                                                task.wait()
+                                            end
+                                            myRoot.CFrame = savedCFrame
+                                            myRoot.AssemblyLinearVelocity = Vector3.zero
+                                            myRoot.AssemblyAngularVelocity = Vector3.zero
+                                        end
+                                    end
+                                    stomped = true
+                                    break
+                                end
+                            end
+                        end
+                        task.wait(0.3)
+                    end
+                end)
+                beginOrbit(target)
+                while not stomped and killActive do
+                    task.wait(0.2)
+                end
+                task.wait(0.5)
+                pcall(function() task.cancel(stompThread) end)
+                removeKillHighlight()
+            else
+                task.wait(0.5)
+            end
+            idx = idx % #targetsList + 1
+            task.wait(0.3)
+        end
+        stopKill()
+    end)
+    _G.AddBotLog("Multi-kill with stomp: " .. table.concat(targetsList, ", "), "info")
+    sendChat("🔫 Multi‑kill with stomp: " .. table.concat(targetsList, ", ") .. "!")
+end
+local function updateWallbang()
+    if killActive or killAuraActive or bringActive then setWallbang(true) else setWallbang(false) end
+end
+local function stopAuraOrbit()
+    if killAuraOrbitConn then killAuraOrbitConn:Disconnect(); killAuraOrbitConn = nil end
+end
+local function stopKillAura()
+    killAuraActive = false
+    stopAuraOrbit()
+    if killAuraLoopThread then task.cancel(killAuraLoopThread); killAuraLoopThread = nil end
+    killAuraTarget = nil
+    updateWallbang()
+end
+local function startAuraFollow(ownerPlayer, targetPlayer)
+    stopAuraOrbit()
+    setWallbang(true)
+    local leftOffset = 9
+    local autoShootCooldown = 0.15
+    local lastShot = 0
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+    if not ownerPlayer or not ownerPlayer.Character then return end
+    local ownerRoot = ownerPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not ownerRoot then return end
+    setNoclip(myChar)
+    killAuraOrbitConn = RunService.Heartbeat:Connect(function(dt)
+        if not killAuraActive then stopAuraOrbit(); return end
+        if not ownerPlayer or not ownerPlayer.Parent or not ownerPlayer.Character then stopKillAura(); return end
+        local ownerRoot = ownerPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not ownerRoot then stopKillAura(); return end
+        local aimTargetRoot = nil
+        if targetPlayer and targetPlayer.Parent and targetPlayer.Character then
+            local targetHRP = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if targetHRP then aimTargetRoot = targetHRP end
+        end
+        if not aimTargetRoot then killAuraTarget = nil; stopAuraOrbit(); return end
+        local dist = (ownerRoot.Position - aimTargetRoot.Position).Magnitude
+        if dist > killAuraRange then killAuraTarget = nil; stopAuraOrbit(); return end
+        local myChar = LocalPlayer.Character
+        if not myChar then return end
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+        if not myRoot then return end
+        local hum = myChar:FindFirstChildOfClass("Humanoid")
+        if hum and hum.MaxHealth > 0 then hum.Health = hum.MaxHealth end
+        if not myChar:FindFirstChildOfClass("Tool") then equipCurrentGun() end
+        setNoclip(myChar)
+        local desiredPos = ownerRoot.CFrame * CFrame.new(-leftOffset, 0, 0)
+        local finalPos = Vector3.new(desiredPos.Position.X, ownerRoot.Position.Y, desiredPos.Position.Z)
+        myRoot.Velocity = Vector3.zero
+        myRoot.RotVelocity = Vector3.zero
+        myRoot.CFrame = CFrame.new(finalPos, aimTargetRoot.Position)
+        myRoot.AssemblyLinearVelocity = Vector3.zero
+        myRoot.AssemblyAngularVelocity = Vector3.zero
+        if tick() - lastShot >= autoShootCooldown then
+            if ShootCurrentWeapon() then lastShot = tick() end
+        end
+    end)
+end
+local function killAuraLoop()
+    while killAuraActive do
+        local owner = findPlayer(ownerName:lower())
+        if not owner or not owner.Character then task.wait(0.5); continue end
+        local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
+        if not ownerRoot then task.wait(0.5); continue end
+        if not killAuraTarget or not killAuraTarget.Parent or not killAuraTarget.Character or not killAuraTarget.Character:FindFirstChild("HumanoidRootPart") then
+            stopAuraOrbit()
+            killAuraTarget = nil
+            local closestDist = killAuraRange + 1
+            local closestPlayer = nil
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer and plr.Name:lower() ~= ownerName:lower() and plr.Character then
+                    local theirHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+                    if theirHRP then
+                        local dist = (theirHRP.Position - ownerRoot.Position).Magnitude
+                        if dist <= killAuraRange and dist < closestDist then closestDist = dist; closestPlayer = plr end
+                    end
+                end
+            end
+            if closestPlayer then
+                killAuraTarget = closestPlayer
+                startAuraFollow(owner, closestPlayer)
+            end
+        else
+            if not killAuraOrbitConn then startAuraFollow(owner, killAuraTarget) end
+        end
+        task.wait(0.5)
+    end
+end
+local function startKillAura()
+    stopKillAura()
+    stopKill()
+    killAuraActive = true
+    updateWallbang()
+    task.spawn(function()
+        waitForCharacter()
+        setNoclip(LocalPlayer.Character)
+        equipCurrentGun()
+    end)
+    killAuraLoopThread = task.spawn(killAuraLoop)
+    _G.AddBotLog("Kill Aura enabled! Range: " .. killAuraRange .. " studs", "info")
+    sendChat("🎯 Kill Aura enabled! Range: " .. killAuraRange .. " studs")
+end
+local function stopBringOrbit()
+    if bringOrbitConn then bringOrbitConn:Disconnect(); bringOrbitConn = nil end
+    if bringBodyPos then bringBodyPos:Destroy(); bringBodyPos = nil end
+    if bringBodyGyro then bringBodyGyro:Destroy(); bringBodyGyro = nil end
+end
+local function startBringOrbit(targetPlayer)
+    stopBringOrbit()
+    setWallbang(true)
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+    local targetChar = targetPlayer.Character
+    if not targetChar then return end
+    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetRoot then return end
+    setNoclip(myChar)
+    local orbitRadius = 5
+    local orbitHeight = -20
+    local orbitSpeed = 2
+    local shootCooldown = 0.15
+    local lastShot = 0
+    local bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    bodyGyro.CFrame = myRoot.CFrame
+    bodyGyro.Parent = myRoot
+    bringBodyGyro = bodyGyro
+    local bodyPos = Instance.new("BodyPosition")
+    bodyPos.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    bodyPos.P = 50000
+    bodyPos.D = 2000
+    bodyPos.Position = myRoot.Position
+    bodyPos.Parent = myRoot
+    bringBodyPos = bodyPos
+    local angle = math.atan2(myRoot.Position.Z - targetRoot.Position.Z, myRoot.Position.X - targetRoot.Position.X)
+    bringOrbitConn = RunService.Heartbeat:Connect(function(dt)
+        if not bringActive then stopBringOrbit(); return end
+        if not targetPlayer or not targetPlayer.Parent then bringActive = false; stopBringOrbit(); setWallbang(false); return end
+        local targetChar = targetPlayer.Character
+        if not targetChar then bringActive = false; stopBringOrbit(); setWallbang(false); return end
+        local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+        if not targetRoot then bringActive = false; stopBringOrbit(); setWallbang(false); return end
+        local hum = targetChar:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health <= 5 then
+            bringActive = false
+            stopBringOrbit()
+            setWallbang(false)
+            local myChar = LocalPlayer.Character
+            if myChar then
+                local myRoot = myChar:FindFirstChild("UpperTorso") or myChar:FindFirstChild("Torso") or myChar:FindFirstChild("HumanoidRootPart")
+                local targetRoot2 = targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("Torso") or targetChar:FindFirstChild("HumanoidRootPart")
+                if myRoot and targetRoot2 then
+                    local savedCFrame = myRoot.CFrame
+                    local _, myYaw, _ = myRoot.CFrame:ToOrientation()
+                    for i = 1, 4 do
+                        if targetRoot2 and targetRoot2.Parent then
+                            myRoot.CFrame = CFrame.new(targetRoot2.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, myYaw, 0)
+                        end
+                        task.wait(0.3)
+                    end
+                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.G, false, game)
+                    task.wait(0.7)
+                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.G, false, game)
+                    task.wait(1.0)
+                    local owner = findPlayer(ownerName:lower())
+                    if owner and owner.Character and owner.Character:FindFirstChild("HumanoidRootPart") then
+                        local ownerPos = owner.Character.HumanoidRootPart.Position + Vector3.new(2, 0, 0)
+                        myRoot.CFrame = CFrame.new(ownerPos) * CFrame.Angles(0, math.rad(90), 0)
+                    end
+                    myRoot.AssemblyLinearVelocity = Vector3.zero
+                    myRoot.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
+            bringTargetName = ""
+            _G.AddBotLog(targetPlayer.Name .. " delivered!", "info")
+            sendChat("📦 Bringing " .. targetPlayer.Name .. "... → ✅ " .. targetPlayer.Name .. " delivered!")
+            return
+        end
+        local myChar = LocalPlayer.Character
+        if not myChar then return end
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+        if not myRoot then return end
+        local myHum = myChar:FindFirstChildOfClass("Humanoid")
+        if myHum and myHum.MaxHealth > 0 then myHum.Health = myHum.MaxHealth end
+        if not myChar:FindFirstChildOfClass("Tool") then equipCurrentGun() end
+        setNoclip(myChar)
+        if not bodyPos.Parent then bodyPos.Parent = myRoot end
+        if not bodyGyro.Parent then bodyGyro.Parent = myRoot end
+        angle = angle + orbitSpeed * dt
+        local center = Vector3.new(targetRoot.Position.X, targetRoot.Position.Y + orbitHeight, targetRoot.Position.Z)
+        local finalPos = center + Vector3.new(math.cos(angle) * orbitRadius, 0, math.sin(angle) * orbitRadius)
+        bodyPos.Position = finalPos
+        bodyGyro.CFrame = CFrame.new(finalPos, targetRoot.Position)
+        if tick() - lastShot >= shootCooldown then
+            if ShootCurrentWeapon() then lastShot = tick() end
+        end
+    end)
+end
+local function bringPlayer(playerName)
+    if bringActive then return end
+    local target = findPlayer(playerName:lower())
+    if not target then
+        _G.AddBotLog("Player " .. playerName .. " not found", "warn")
+        sendChat("❌ Player " .. playerName .. " not found")
+        return
+    end
+    bringActive = true
+    bringTargetName = playerName
+    waitForCharacter()
+    equipCurrentGun()
+    setWallbang(true)
+    startBringOrbit(target)
+    _G.AddBotLog("Bringing " .. target.Name .. "...", "info")
+end
+local function dropTarget()
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.G, false, game)
+    task.wait(0.1)
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.G, false, game)
+    if bringActive then
+        bringActive = false
+        stopBringOrbit()
+        updateWallbang()
+        bringTargetName = ""
+        _G.AddBotLog("Target dropped!", "info")
+        sendChat("📦 Target dropped!")
+    end
+end
+local function startSummon()
+    if summonActive then return end
+    summonActive = true
+    waitForCharacter()
+    local myChar = LocalPlayer.Character
+    setNoclip(myChar)
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+    local hum = myChar:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.PlatformStand = true
+        hum.AutoRotate = false
+        stopSummonAnims()
+        summonAnimTrack = playSummonAnim(
+            hum, 
+            SUMMON_ANIM_IDS.SUMMON_START, 
+            1.2,
+            false,
+            Enum.AnimationPriority.Action4,
+            0.3
+        )
+        if summonAnimTrack then
+            summonAnimTrack.Stopped:Connect(function()
+                if not summonActive then return end
+                summonIdleTrack = playSummonAnim(
+                    hum,
+                    SUMMON_ANIM_IDS.STAND_IDLE,
+                    1.0,
+                    true,
+                    Enum.AnimationPriority.Idle,
+                    0.2
+                )
+            end)
+        end
+    end
+    local bodyPos = Instance.new("BodyPosition")
+    bodyPos.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    bodyPos.P = 50000
+    bodyPos.D = 2000
+    bodyPos.Parent = myRoot
+    summonBodyPos = bodyPos
+    local bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    bodyGyro.Parent = myRoot
+    summonBodyGyro = bodyGyro
+    local lastSpeed = 0
+    summonConnection = RunService.Heartbeat:Connect(function()
+        if not summonActive then return end
+        local owner = findPlayer(ownerName:lower())
+        if not owner or not owner.Character or not owner.Character:FindFirstChild("HumanoidRootPart") then return end
+        local ownerRoot = owner.Character.HumanoidRootPart
+        local myChar = LocalPlayer.Character
+        if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+        local myRoot = myChar.HumanoidRootPart
+        local behindOffset = 2.5
+        local verticalOffset = 1.5
+        local backPos = ownerRoot.Position - ownerRoot.CFrame.LookVector * behindOffset
+        local targetPos = backPos + Vector3.new(0, verticalOffset, 0)
+        local targetCFrame = CFrame.new(targetPos, targetPos + ownerRoot.CFrame.LookVector)
+        bodyPos.Position = targetPos
+        bodyGyro.CFrame = targetCFrame
+        local currentSpeed = ownerRoot.Velocity.Magnitude
+        local isMoving = currentSpeed > 2
+        if isMoving and lastSpeed <= 2 then
+            if summonIdleTrack then
+                pcall(function() summonIdleTrack:Stop(0.1) end)
+                summonIdleTrack = nil
+            end
+            if not summonWalkTrack or not summonWalkTrack.IsPlaying then
+                local hum = myChar:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    summonWalkTrack = playSummonAnim(
+                        hum,
+                        SUMMON_ANIM_IDS.STAND_WALK,
+                        1.5,
+                        true,
+                        Enum.AnimationPriority.Movement,
+                        0.15
+                    )
+                end
+            end
+        elseif not isMoving and lastSpeed > 2 then
+            if summonWalkTrack then
+                pcall(function() summonWalkTrack:Stop(0.1) end)
+                summonWalkTrack = nil
+            end
+            if not summonIdleTrack or not summonIdleTrack.IsPlaying then
+                local hum = myChar:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    summonIdleTrack = playSummonAnim(
+                        hum,
+                        SUMMON_ANIM_IDS.STAND_IDLE,
+                        1.0,
+                        true,
+                        Enum.AnimationPriority.Idle,
+                        0.2
+                    )
+                end
+            end
+        end
+        lastSpeed = currentSpeed
+    end)
+    _G.AddBotLog("Summon enabled (2.5 studs behind owner) with DIO Stand animations", "info")
+    sendChat("👤 Summoning bot with DIO Stand animation...")
+end
+local function stopSummon()
+    summonActive = false
+    if summonConnection then summonConnection:Disconnect(); summonConnection = nil end
+    if summonBodyPos then summonBodyPos:Destroy(); summonBodyPos = nil end
+    if summonBodyGyro then summonBodyGyro:Destroy(); summonBodyGyro = nil end
+    if LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            stopSummonAnims()
+            local endTrack = playSummonAnim(
+                hum,
+                SUMMON_ANIM_IDS.SUMMON_END,
+                1.5,
+                false,
+                Enum.AnimationPriority.Action3,
+                0.2
+            )
+            local resetHum = function()
+                hum.PlatformStand = false
+                hum.AutoRotate = true
+                stopSummonAnims()
+            end
+            if endTrack then
+                endTrack.Stopped:Connect(resetHum)
+                task.delay(3, function()
+                    resetHum()
+                end)
+            else
+                resetHum()
+            end
+        end
+    end
+    _G.AddBotLog("Summon disabled", "info")
+    sendChat("👤 Summon disabled!")
+end
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    if killActive and killTargetName ~= "" and not killWaiting then
+        task.wait(1)
+        waitForCharacter()
+        setNoclip(newChar)
+        equipCurrentGun()
+        local target = findPlayer(killTargetName:lower())
+        if target then
+            connectTarget(target)
+            beginOrbit(target)
+        end
+    end
+    if killAuraActive then
+        task.wait(1)
+        waitForCharacter()
+        setNoclip(newChar)
+        equipCurrentGun()
+        local owner = findPlayer(ownerName:lower())
+        if owner and killAuraTarget and killAuraTarget.Parent and killAuraTarget.Character and killAuraTarget.Character:FindFirstChild("HumanoidRootPart") then
+            startAuraFollow(owner, killAuraTarget)
+        else killAuraTarget = nil end
+    end
+    if bringActive and bringTargetName ~= "" then
+        task.wait(1)
+        waitForCharacter()
+        setNoclip(newChar)
+        equipCurrentGun()
+        local target = findPlayer(bringTargetName:lower())
+        if target then setWallbang(true); startBringOrbit(target) end
+    end
+    if summonActive then
+        stopSummon()
+        task.wait(1)
+        startSummon()
+    end
+end)
+GunHandler.GetAim = function(muzzlePos)
+    if killActive and killTargetName ~= "" and not killWaiting then
+        local target = findPlayer(killTargetName:lower())
+        if target and target.Character then
+            local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then return (hrp.Position - muzzlePos).Unit end
+        end
+    end
+    if killAuraActive and killAuraTarget then
+        local targetChar = killAuraTarget.Character
+        if targetChar then
+            local hrp = targetChar:FindFirstChild("HumanoidRootPart")
+            if hrp then return (hrp.Position - muzzlePos).Unit end
+        end
+    end
+    if bringActive and bringTargetName ~= "" then
+        local target = findPlayer(bringTargetName:lower())
+        if target and target.Character then
+            local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then return (hrp.Position - muzzlePos).Unit end
+        end
+    end
+    return oldGetAim(muzzlePos)
+end
+local function safeModeFindRadiusFolder()
+    local ignored = workspace:FindFirstChild("Ignored")
+    local siren = ignored and ignored:FindFirstChild("Siren")
+    local radius = siren and siren:FindFirstChild("Radius")
+    return radius
+end
+local function safeModeShowNotice(text)
+    if safeModeLabel then
+        safeModeLabel.Text = text
+        safeModeLabel.Visible = true
+        local myToken = safeModeHideToken + 1
+        safeModeHideToken = myToken
+        task.delay(3, function()
+            if safeModeHideToken == myToken then
+                safeModeLabel.Visible = false
+            end
+        end)
+    end
+end
+local function safeModeGuessShooter()
+    local radius = safeModeFindRadiusFolder()
+    if not radius then
+        return nil
+    end
+    local best = nil
+    for _, child in ipairs(radius:GetChildren()) do
+        if child.Name == "BULLET_RAYS" then
+            local owner = child:GetAttribute("OwnerCharacter")
+            if owner and owner ~= LocalPlayer.Name then
+                best = owner
+            end
+        end
+    end
+    return best
+end
+local function safeModeWatchCharacter(character)
+    local humanoid = character:WaitForChild("Humanoid", 10)
+    if not humanoid then
+        return
+    end
+    local lastHealth = humanoid.Health
+    if safeModeHealthConn then
+        safeModeHealthConn:Disconnect()
+    end
+    safeModeHealthConn = humanoid.HealthChanged:Connect(function(newHealth)
+        if newHealth < lastHealth then
+            local shooter = safeModeGuessShooter()
+            if shooter then
+                safeModeShowNotice("Shot by: " .. shooter)
+                _G.AddBotLog("⚠️ Shot by: " .. shooter, "warn")
+                sendChat("🔍 Shot by: " .. shooter)
+                stopKill()
+                task.wait(0.2)
+                local shooterPlayer = findPlayer(shooter:lower())
+                if shooterPlayer then
+                    if shooterPlayer.Name:lower() == ownerName:lower() or shooterPlayer == LocalPlayer then
+                        _G.AddBotLog("Cannot target owner or yourself!", "warn")
+                        return
+                    end
+                    _G.AddBotLog("🎯 Engaging shooter: " .. shooterPlayer.Name, "info")
+                    sendChat("🔫 Eliminating " .. shooterPlayer.Name .. "!")
+                    equipCurrentGun()
+                    waitForCharacter()
+                    setNoclip(LocalPlayer.Character)
+                    startKill(shooterPlayer.Name)
+                    safeModeTargetName = shooterPlayer.Name
+                else
+                    _G.AddBotLog("⚠️ Shooter not found: " .. shooter, "warn")
+                end
+            else
+                _G.AddBotLog("⚠️ Owner took damage but shooter unknown", "warn")
+                safeModeShowNotice("Shot by: Unknown")
+            end
+        end
+        lastHealth = newHealth
+    end)
+end
+local function stopSafeMode()
+    safeModeActive = false
+    stopKill()
+    if safeModeHealthConn then
+        safeModeHealthConn:Disconnect()
+        safeModeHealthConn = nil
+    end
+    if safeModeCharConn then
+        safeModeCharConn:Disconnect()
+        safeModeCharConn = nil
+    end
+    safeModeAttacker = nil
+    safeModeTargetName = ""
+    setWallbang(false)
+    if safeModeGui then
+        pcall(function() safeModeGui:Destroy() end)
+        safeModeGui = nil
+        safeModeLabel = nil
+    end
+    _G.AddBotLog("Safe mode disabled", "info")
+    sendChat("🛡️ Safe mode OFF!")
+end
+local function startSafeMode()
+    if safeModeActive then
+        _G.AddBotLog("Safe mode already active", "warn")
+        sendChat("⚠️ Safe mode is already ON!")
+        return
+    end
+    safeModeActive = true
+    safeModeAttacker = nil
+    safeModeTargetName = ""
+    safeModeHideToken = 0
+    _G.AddBotLog("Safe mode enabled! Monitoring owner for damage...", "info")
+    sendChat("🛡️ Safe mode ON! Monitoring owner...")
+    waitForCharacter()
+    task.wait(0.5)
+    equipCurrentGun()
+    setNoclip(LocalPlayer.Character)
+    local container = gethui()
+    if container then
+        safeModeGui = Instance.new("ScreenGui")
+        safeModeGui.Name = "SafeModeGui"
+        safeModeGui.ResetOnSpawn = false
+        safeModeGui.IgnoreGuiInset = true
+        safeModeGui.DisplayOrder = 1000
+        safeModeGui.Parent = container
+        safeModeLabel = Instance.new("TextLabel")
+        safeModeLabel.Name = "Notice"
+        safeModeLabel.AnchorPoint = Vector2.new(0.5, 0)
+        safeModeLabel.Position = UDim2.new(0.5, 0, 0, 60)
+        safeModeLabel.Size = UDim2.new(0, 400, 0, 34)
+        safeModeLabel.BackgroundColor3 = Color3.fromRGB(150, 20, 20)
+        safeModeLabel.BackgroundTransparency = 0.15
+        safeModeLabel.BorderSizePixel = 0
+        safeModeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        safeModeLabel.Font = Enum.Font.GothamBold
+        safeModeLabel.TextSize = 18
+        safeModeLabel.Visible = false
+        safeModeLabel.Text = ""
+        safeModeLabel.Parent = safeModeGui
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 6)
+        corner.Parent = safeModeLabel
+    end
+    local owner = findPlayer(ownerName:lower())
+    if not owner then
+        _G.AddBotLog("Owner not found! Safe mode stopped.", "error")
+        safeModeActive = false
+        return
+    end
+    local ownerChar = owner.Character
+    if ownerChar then
+        safeModeWatchCharacter(ownerChar)
+    end
+    if safeModeCharConn then
+        safeModeCharConn:Disconnect()
+    end
+    safeModeCharConn = owner.CharacterAdded:Connect(safeModeWatchCharacter)
+end
+local function onPlayerChatted(player, message)
+    if player.Name:lower() ~= ownerName:lower() and player.DisplayName:lower() ~= ownerName:lower() then return end
+    local msg = message:lower()
+    if msg == ".hide" then
+        local myChar = LocalPlayer.Character
+        if myChar then
+            local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+            if myRoot then
+                myRoot.CFrame = CFrame.new(82.5, 139.0, -668.2)
+                myRoot.Velocity = Vector3.zero
+                myRoot.RotVelocity = Vector3.zero
+                myRoot.AssemblyLinearVelocity = Vector3.zero
+                myRoot.AssemblyAngularVelocity = Vector3.zero
+                _G.AddBotLog("Hidden bot at safe position", "info")
+                sendChat("🙈 Bot hidden!")
+            else
+                _G.AddBotLog("Cannot hide - no character", "warn")
+            end
+        end
+    elseif msg == ".stompall on" then
+        if not _G.StompAllEnabled then
+            _G.StompAllEnabled = true
+            _G.AddBotLog("Auto Stomp All enabled", "info")
+            sendChat("👟 Auto Stomp All ON!")
+            task.spawn(function()
+                while _G.StompAllEnabled do
+                    local myChar = LocalPlayer.Character
+                    if myChar then
+                        local myRoot = myChar:FindFirstChild("UpperTorso") or myChar:FindFirstChild("Torso") or myChar:FindFirstChild("HumanoidRootPart")
+                        if myRoot then
+                            local stompRemote = (
+                                ReplicatedStorage:FindFirstChild("GameRemotes") and ReplicatedStorage.GameRemotes:FindFirstChild("MainGameEvent")
+                            )
+                                or (ReplicatedStorage:FindFirstChild("MainRemotes") and ReplicatedStorage.MainRemotes:FindFirstChild("MainRemoteEvent"))
+                                or ReplicatedStorage:FindFirstChild("MainEvent")
+                                or ReplicatedStorage:FindFirstChild("StompEvent")
+                                or getgenv().StompRemote
+                            if stompRemote then
+                                for _, plr in ipairs(Players:GetPlayers()) do
+                                    if not _G.StompAllEnabled then break end
+                                    if plr.Name:lower() == ownerName:lower() or plr == LocalPlayer then
+                                        continue
+                                    end
+                                    local targetChar = plr.Character
+                                    if targetChar then
+                                        local bodyEffects = targetChar:FindFirstChild("BodyEffects")
+                                        if bodyEffects then
+                                            local koValue = bodyEffects:FindFirstChild("K.O")
+                                            local deadValue = bodyEffects:FindFirstChild("Dead")
+                                            if koValue and koValue.Value == true and deadValue and deadValue.Value == false then
+                                                local targetRoot = targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("Torso") or targetChar:FindFirstChild("HumanoidRootPart")
+                                                if targetRoot then
+                                                    local savedCFrame = myRoot.CFrame
+                                                    local _, myYaw, _ = myRoot.CFrame:ToOrientation()
+                                                    local stompCount = 0
+                                                    while koValue and koValue.Value == true and deadValue and deadValue.Value == false and stompCount < 50 and _G.StompAllEnabled do
+                                                        if targetChar.Parent and targetRoot then
+                                                            myRoot.CFrame = CFrame.new(targetRoot.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, myYaw, 0)
+                                                        end
+                                                        stompRemote:FireServer("Stomp")
+                                                        stompCount = stompCount + 1
+                                                        task.wait()
+                                                    end
+                                                    myRoot.CFrame = savedCFrame
+                                                    myRoot.AssemblyLinearVelocity = Vector3.zero
+                                                    myRoot.AssemblyAngularVelocity = Vector3.zero
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    task.wait(0.1)
+                end
+            end)
+        else
+            _G.AddBotLog("Auto Stomp All is already enabled", "warn")
+            sendChat("⚠️ Auto Stomp All is already ON!")
+        end
+    elseif msg == ".stompall off" then
+        _G.StompAllEnabled = false
+        _G.AddBotLog("Auto Stomp All disabled", "info")
+        sendChat("🛑 Auto Stomp All OFF!")
+    elseif msg == ".s" then
+        teleportToOwner()
+        _G.AddBotLog("Teleported to " .. ownerName, "info")
+        sendChat("✅ Teleported to " .. ownerName .. "!")
+    elseif msg == ".reset" then
+        resetBot()
+        _G.AddBotLog("Reset bot", "info")
+        sendChat("💀 Resetting bot...")
+    elseif msg == ".fling aura" then
+        startFlingAura()
+    elseif msg == ".unfling aura" then
+        stopFlingAura()
+        _G.AddBotLog("Fling Aura disabled", "info")
+        sendChat("🛑 Fling Aura disabled!")
+    elseif msg:match("^%.flingmod %d+$") then
+        local mode = tonumber(msg:match("%d+"))
+        if mode == 1 or mode == 2 then
+            flingMode = mode
+            if flingAuraEnabled or flingMode2Running then startFlingAura() end
+            _G.AddBotLog("Fling mode set to " .. mode, "info")
+            sendChat("⚙️ Fling mode set to " .. mode .. "!")
+        end
+    elseif msg:match("^%.f +%S+$") then
+        local targetName = msg:match("^%.f +(%S+)$")
+        if targetName then
+            if targetName:lower() == "off" then
+                stopTargetFling()
+                _G.AddBotLog("Target fling stopped", "info")
+                sendChat("🛑 Target fling stopped!")
+            else
+                startTargetFling(targetName)
+            end
+        end
+    elseif msg == ".kill aura off" or msg == ".kill aura stop" then
+        stopKillAura()
+        _G.AddBotLog("Kill Aura disabled", "info")
+        sendChat("🛑 Kill Aura disabled!")
+    elseif msg:match("^%.kill%s+.+$") then
+        local args = msg:match("^%.kill%s+(.+)$")
+        if args:lower() == "off" then
+            stopKill()
+            _G.AddBotLog("Kill mode disabled", "info")
+            sendChat("🛑 Kill mode disabled!")
+        elseif args:lower() == "aura" then
+            if not killAuraActive then
+                startKillAura()
+            else
+                stopKillAura()
+                _G.AddBotLog("Kill Aura disabled", "info")
+                sendChat("🛑 Kill Aura disabled!")
+            end
+        elseif args:lower() == ownerName:lower() or args:lower() == LocalPlayer.Name:lower() then
+            _G.AddBotLog("Cannot target owner or yourself!", "warn")
+            sendChat("❌ Cannot target owner or yourself!")
+        else
+            if args:find(",") then
+                local targetsList = {}
+                for name in args:gmatch("([^,]+)") do
+                    local trimmed = name:match("^%s*(.-)%s*$")
+                    if trimmed ~= "" then table.insert(targetsList, trimmed) end
+                end
+                if #targetsList > 0 then
+                    startMultiKill(targetsList)
+                end
+            else
+                startKill(args)
+            end
+        end
+    elseif msg:match("^%.set%s+%d+$") then
+        local newRange = tonumber(msg:match("^%.set%s+(%d+)$"))
+        if newRange and newRange > 0 then
+            killAuraRange = newRange
+            _G.AddBotLog("Kill aura range set to " .. newRange .. " studs", "info")
+            sendChat("🎯 Kill aura range set to " .. newRange .. " studs!")
+        end
+    elseif msg:match("^%.bring%s+(.+)$") then
+        local nameArg = msg:match("^%.bring%s+(.+)$")
+        bringPlayer(nameArg)
+    elseif msg == ".drop" then
+        dropTarget()
+    elseif msg == ".summon on" then
+        stopSummon()
+        startSummon()
+    elseif msg == ".summon off" then
+        stopSummon()
+    elseif msg:match("^%.gm%s+.+$") then
+        local gunType = msg:match("^%.gm%s+(.+)$")
+        if gunType:lower() == "revolver" then
+            currentGunMode = "Revolver"
+            _G.AddBotLog("Gun mode set to Revolver", "info")
+            sendChat("🔫 Gun mode: Revolver")
+            if killActive or killAuraActive or bringActive then
+                equipCurrentGun()
+            end
+        elseif gunType:lower() == "shotgun" then
+            currentGunMode = "TacticalShotgun"
+            _G.AddBotLog("Gun mode set to TacticalShotgun", "info")
+            sendChat("🔫 Gun mode: TacticalShotgun")
+            if killActive or killAuraActive or bringActive then
+                equipCurrentGun()
+            end
+        else
+            _G.AddBotLog("Invalid gun type. Use: Revolver or Shotgun", "warn")
+            sendChat("❌ Invalid! Use: .gm Revolver or .gm Shotgun")
+        end
+    elseif msg == ".safe on" then
+        startSafeMode()
+    elseif msg == ".safe off" then
+        stopSafeMode()
+    end
+end
+for _, player in ipairs(Players:GetPlayers()) do
+    player.Chatted:Connect(function(msg) onPlayerChatted(player, msg) end)
+end
+Players.PlayerAdded:Connect(function(player)
+    player.Chatted:Connect(function(msg) onPlayerChatted(player, msg) end)
+end)
+setWallbang(false)
+waitForCharacter()
+equipCurrentGun()
+_G.AddBotLog("Bot ready - Owner: " .. ownerName, "info")
+_G.AddBotLog("Gun Mode: " .. currentGunMode .. " (Use .gm Revolver/Shotgun to switch)", "info")
+_G.AddBotLog("No Cooldown (Full Auto) Active", "info")
+_G.AddBotLog("Protected: Cannot target owner or self", "info")
+_G.AddBotLog("Fast Orbit System Active (Height: -20)", "info")
+_G.AddBotLog("Commands: .hide | .stompall on/off | .s | .reset | .fling aura | .f | .kill | .bring | .summon | .gm | .safe on/off", "info")
+sendChat("✅ Bot loaded! Owner: " .. ownerName)
+sendChat("🔫 Gun mode: " .. currentGunMode .. " | .gm Revolver/Shotgun")
+sendChat("🛡️ Protected: Cannot target owner or self")
+sendChat("👟 .stompall on/off - Auto stomp all downed players")
+workspace.FallenPartsDestroyHeight = -50000
+local function SetupAntiVoid(char)
+    task.spawn(function()
+        repeat task.wait(0.5) until char and char:FindFirstChild("HumanoidRootPart")
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum then return end
+        while char and char.Parent do
+            if root.Position.Y < -100 then
+                local newPos = Vector3.new(root.Position.X, 50, root.Position.Z)
+                root.CFrame = CFrame.new(newPos)
+                root.Velocity = Vector3.zero
+                root.RotVelocity = Vector3.zero
+                hum.Health = hum.MaxHealth
+                _G.AddBotLog("⚠️ Bot fell into void! Teleported back up.", "warn")
+            end
+            task.wait(0.5)
+        end
+    end)
+end
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    task.wait(0.5)
+    SetupAntiVoid(newChar)
+end)
+if LocalPlayer.Character then
+    SetupAntiVoid(LocalPlayer.Character)
+end
+local Debounce = false
+local LastAmmoValue = -1
+RunService.RenderStepped:Connect(function()
+    if Debounce then return end
+    local char = LocalPlayer.Character
+    if not char or not char.Parent then return end
+    local Tool = char:FindFirstChildWhichIsA("Tool")
+    if not Tool then return end
+    local Ammo = Tool:FindFirstChild("Ammo")
+    local MaxAmmo = Tool:FindFirstChild("MaxAmmo")
+    if Ammo and MaxAmmo then
+        if Ammo.Value == 0 and Ammo.Value < MaxAmmo.Value then
+            if LastAmmoValue ~= 0 then
+                Debounce = true
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
+                task.wait(0.05)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+                task.wait(0.3)
+                Debounce = false
+            end
+        end
+        LastAmmoValue = Ammo.Value
+    end
+end)
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    task.wait(1)
+    setNoclip(newChar)
+    equipCurrentGun()
+    SetupAntiVoid(newChar)
+    if safeModeActive then
+        _G.AddBotLog("Bot respawned, re-equipped gun", "info")
+    end
+end)
+print("✅ Bot loaded with ALL commands!")
