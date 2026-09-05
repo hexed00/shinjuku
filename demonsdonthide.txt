@@ -15,6 +15,8 @@
       + CHAT SPY TOGGLE on Options — "emorce chat spy enabled"
       + ADMIN CMDS (.tp / .spec / .unspec) with ON/OFF toggle
       + DES HOOD STAND bot (_G.BotOwner)
+      + DEMORCE ANIMATIONS + DEMORCE SPEED BOOST
+      + Fly / Shinjuku fly → carrrs.lua
     KEPT FROM v2.0:
       Server browser, premium profile, expanded hub, live player list,
       keybind system, ESP preview, more scripts, better UX,
@@ -69,6 +71,8 @@ local infYieldImageUrl = "https://i.pinimg.com/736x/1d/5d/58/1d5d58d39a8337241d1
 local azureImageUrl = "https://i.pinimg.com/736x/2a/6c/73/2a6c73eaa84ea9a275abbc773784f5bf.jpg"
 local nightsImageUrl = "https://i.pinimg.com/1200x/d5/05/45/d505453274884456a103151437c010f9.jpg"
 local desHoodImageUrl = "https://i.pinimg.com/736x/d8/d4/df/d8d4dfc3b4079cb054a591a9342248cf.jpg"
+local animatrixImageUrl = "https://i.pinimg.com/736x/5b/fa/01/5bfa01b1e57099feee76e33543e703b7.jpg"
+local speedBoostImageUrl = "https://i.pinimg.com/736x/f5/9e/ea/f59eeac8ca05d45072d69bf2d4d1d9ba.jpg"
 local shinImagePath = "emorce_shinjuku.png"
 local zeeImagePath = "emorce_zee.png"
 local fishingImagePath = "emorce_fishing.png"
@@ -85,6 +89,8 @@ local infYieldImagePath = "emorce_infyield.png"
 local azureImagePath = "emorce_azure.png"
 local nightsImagePath = "emorce_nights.png"
 local desHoodImagePath = "emorce_deshood.png"
+local animatrixImagePath = "emorce_animatrix.png"
+local speedBoostImagePath = "emorce_speedboost.png"
 pcall(function()
     writefile(shinImagePath, game:HttpGet(shinImageUrl))
     writefile(zeeImagePath, game:HttpGet(zeeImageUrl))
@@ -102,6 +108,8 @@ pcall(function()
     writefile(azureImagePath, game:HttpGet(azureImageUrl))
     writefile(nightsImagePath, game:HttpGet(nightsImageUrl))
     writefile(desHoodImagePath, game:HttpGet(desHoodImageUrl))
+    writefile(animatrixImagePath, game:HttpGet(animatrixImageUrl))
+    writefile(speedBoostImagePath, game:HttpGet(speedBoostImageUrl))
 end)
 local function getImage(path)
     if isfile and isfile(path) then
@@ -595,7 +603,7 @@ local ScriptsSub = Instance.new("TextLabel")
 ScriptsSub.Size = UDim2.new(1, -40, 0, 18)
 ScriptsSub.Position = UDim2.new(0, 24, 0, 48)
 ScriptsSub.BackgroundTransparency = 1
-ScriptsSub.Text = "Axion+ edition • 15 scripts • search + filters"
+ScriptsSub.Text = "Axion+ edition • 17 scripts • search + filters"
 ScriptsSub.TextColor3 = Theme.TextMuted
 ScriptsSub.TextSize = 12
 ScriptsSub.Font = Enum.Font.Gotham
@@ -693,7 +701,9 @@ local Scripts = {
     {Name = "INFINITE YIELD", Desc = "Admin commands — 300+ cmds, the classic inf yield", Category = "Admin", Color = Color3.fromRGB(35, 110, 200), Path = infYieldImagePath, Url = "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"},
     {Name = "AZURE MODDED", Desc = "Azure modded menu — unverified, use at your own risk", Category = "Admin", Color = Color3.fromRGB(90, 60, 180), Path = azureImagePath, Url = "https://raw.githubusercontent.com/Actyrn/Scripts/main/AzureModded"},
     {Name = "ZEE DEMORCE", Desc = "Full movement suite", Category = "Movement", Color = Color3.fromRGB(140, 20, 60), Path = zeeImagePath, Url = "https://raw.githubusercontent.com/altr83002-bit/schritpytshinjuku/refs/heads/main/zee.txt"},
-    {Name = "FLY", Desc = "Smooth flight script", Category = "Movement", Color = Color3.fromRGB(100, 20, 80), Path = flyImagePath, Url = "https://raw.githubusercontent.com/altr83002-bit/shinjuku_emorce_scripts/refs/heads/main/fly.txt"},
+    {Name = "FLY", Desc = "Smooth flight script", Category = "Movement", Color = Color3.fromRGB(100, 20, 80), Path = flyImagePath, Url = "https://raw.githubusercontent.com/hexed00/newscripts/refs/heads/main/carrrs.lua"},
+    {Name = "DEMORCE ANIMATIONS", Desc = "Emorce Animatrix — animation suite", Category = "Utility", Color = Color3.fromRGB(160, 40, 120), Path = animatrixImagePath, Url = "https://raw.githubusercontent.com/hexed00/newscripts/refs/heads/main/emorce_animatrix.lua"},
+    {Name = "DEMORCE SPEED BOOST", Desc = "Speed boost script", Category = "Movement", Color = Color3.fromRGB(40, 160, 100), Path = speedBoostImagePath, Url = "https://raw.githubusercontent.com/hexed00/newscripts/refs/heads/main/emorce_speed_boost.lua"},
     {Name = "DES HOOD STAND", Desc = "Des Hood Stand bot — set BotOwner then execute", Category = "Utility", Color = Color3.fromRGB(180, 80, 20), Path = desHoodImagePath, Url = "DES_HOOD_STAND"},
     {Name = "TP", Desc = "Teleport tool", Category = "Utility", Color = Color3.fromRGB(160, 40, 30), Path = tpImagePath, Url = "https://raw.githubusercontent.com/altr83002-bit/scripthubforzeee/refs/heads/main/emorceware.tp/lua"},
     {Name = "MATCHA RAGE", Desc = "Combat focused", Category = "Combat", Color = Color3.fromRGB(200, 50, 20), Path = matchaImagePath, Url = "https://raw.githubusercontent.com/hexed00/shinjuku/refs/heads/main/vvs.txt"},
@@ -812,7 +822,7 @@ for i, data in ipairs(Scripts) do
             if data.Url == "DES_HOOD_STAND" then
                 _G.BotOwner = "Sore61lalit"  -- change this to your name
                 local ok, err = pcall(function()
-                    loadstring(game:HttpGet("https://raw.githubusercontent.com/hexed00/zee/refs/heads/main/veveemorce"))()
+                    loadstring(game:HttpGet("https://raw.githubusercontent.com/hexed00/shinjuku/refs/heads/main/ddder.txt"))()
                 end)
                 if ok then
                     State.ExecCount = State.ExecCount + 1
@@ -823,7 +833,7 @@ for i, data in ipairs(Scripts) do
                 end
             elseif data.Url == "PACK" then
                 SafeLoad("Remote", "https://raw.githubusercontent.com/wtfyen/xd/main/wok")
-                SafeLoad("Fly", "https://raw.githubusercontent.com/altr83002-bit/shinjuku_emorce_scripts/refs/heads/main/fly.txt")
+                SafeLoad("Fly", "https://raw.githubusercontent.com/hexed00/newscripts/refs/heads/main/carrrs.lua")
                 SafeLoad("Inf Yield", "https://raw.githubusercontent.com/altr83002-bit/shinjuku_emorce_scripts/refs/heads/main/inf%20yeild.txt")
                 SafeLoad("Silent Aim v2", "https://raw.githubusercontent.com/altr83002-bit/shinjuku_emorce_scripts/refs/heads/main/silent%20aim%20v2.txt")
                 SafeLoad("Underground", "https://raw.githubusercontent.com/altr83002-bit/shinjuku_emorce_scripts/refs/heads/main/underground")
@@ -1578,7 +1588,7 @@ for i, data in ipairs(Scripts) do
         if data.Url == "DES_HOOD_STAND" then
                 _G.BotOwner = "Sore61lalit"  -- change this to your name
                 local ok, err = pcall(function()
-                    loadstring(game:HttpGet("https://raw.githubusercontent.com/mrnahitsnotmemrnahitsnotme-coder/des-hood-stand/refs/heads/main/des%20hood%20stand"))()
+                    loadstring(game:HttpGet("https://raw.githubusercontent.com/hexed00/shinjuku/refs/heads/main/ddder.txt"))()
                 end)
                 if ok then
                     State.ExecCount = State.ExecCount + 1
@@ -1589,7 +1599,7 @@ for i, data in ipairs(Scripts) do
                 end
             elseif data.Url == "PACK" then
             SafeLoad("Remote", "https://raw.githubusercontent.com/wtfyen/xd/main/wok")
-            SafeLoad("Fly", "https://raw.githubusercontent.com/altr83002-bit/shinjuku_emorce_scripts/refs/heads/main/fly.txt")
+            SafeLoad("Fly", "https://raw.githubusercontent.com/hexed00/newscripts/refs/heads/main/carrrs.lua")
             SafeLoad("Inf Yield", "https://raw.githubusercontent.com/altr83002-bit/shinjuku_emorce_scripts/refs/heads/main/inf%20yeild.txt")
             SafeLoad("Silent Aim v2", "https://raw.githubusercontent.com/altr83002-bit/shinjuku_emorce_scripts/refs/heads/main/silent%20aim%20v2.txt")
             SafeLoad("Underground", "https://raw.githubusercontent.com/altr83002-bit/shinjuku_emorce_scripts/refs/heads/main/underground")
