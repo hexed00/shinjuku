@@ -17,6 +17,13 @@ local safeModeTargetName = ""
 local safeModeGui = nil
 local safeModeLabel = nil
 local safeModeHideToken = 0
+local protectActive = false
+local protectTargetName = ""
+local protectHealthConn = nil
+local protectCharConn = nil
+local protectPlayerConn = nil
+local protectHideToken = 0
+local bulletTpEnabled = false
 local ModifiedTools = {}
 local function setupFullAuto(tool)
     if ModifiedTools[tool] or not tool:FindFirstChild("GunScript") then return end
@@ -354,7 +361,7 @@ AddLog("Bot Logs GUI ready", "info")
 AddLog("Owner set to: " .. ownerName, "info")
 AddLog("No Cooldown (Full Auto) Active", "info")
 AddLog("Protected: Cannot target owner or self", "info")
-AddLog("Commands: All commands loaded", "info")
+AddLog("Commands: All commands loaded (+ .protect / .bullet tp)", "info")
 local function sendChat(msg)
     pcall(function()
         local textService = game:GetService("TextChatService")
@@ -1549,25 +1556,54 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     end
 end)
 GunHandler.GetAim = function(muzzlePos)
+    -- active attack modes first
     if killActive and killTargetName ~= "" and not killWaiting then
         local target = findPlayer(killTargetName:lower())
         if target and target.Character then
             local hrp = target.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then return (hrp.Position - muzzlePos).Unit end
+            if hrp then
+                if bulletTpEnabled then
+                    return hrp.Position
+                end
+                return (hrp.Position - muzzlePos).Unit
+            end
         end
     end
     if killAuraActive and killAuraTarget then
         local targetChar = killAuraTarget.Character
         if targetChar then
             local hrp = targetChar:FindFirstChild("HumanoidRootPart")
-            if hrp then return (hrp.Position - muzzlePos).Unit end
+            if hrp then
+                if bulletTpEnabled then
+                    return hrp.Position
+                end
+                return (hrp.Position - muzzlePos).Unit
+            end
         end
     end
     if bringActive and bringTargetName ~= "" then
         local target = findPlayer(bringTargetName:lower())
         if target and target.Character then
             local hrp = target.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then return (hrp.Position - muzzlePos).Unit end
+            if hrp then
+                if bulletTpEnabled then
+                    return hrp.Position
+                end
+                return (hrp.Position - muzzlePos).Unit
+            end
+        end
+    end
+    -- protect: if currently engaging an attacker, aim at them
+    if protectActive and protectTargetName ~= "" then
+        local target = findPlayer(protectTargetName:lower())
+        if target and target.Character then
+            local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                if bulletTpEnabled then
+                    return hrp.Position
+                end
+                return (hrp.Position - muzzlePos).Unit
+            end
         end
     end
     return oldGetAim(muzzlePos)
@@ -1649,6 +1685,123 @@ local function safeModeWatchCharacter(character)
         lastHealth = newHealth
     end)
 end
+
+local function stopProtect()
+    protectActive = false
+    protectTargetName = ""
+    if protectHealthConn then
+        protectHealthConn:Disconnect()
+        protectHealthConn = nil
+    end
+    if protectCharConn then
+        protectCharConn:Disconnect()
+        protectCharConn = nil
+    end
+    if protectPlayerConn then
+        protectPlayerConn:Disconnect()
+        protectPlayerConn = nil
+    end
+    stopKill()
+    setWallbang(false)
+    _G.AddBotLog("Protect mode disabled", "info")
+    sendChat("🛡️ Protect OFF!")
+end
+
+local function protectWatchCharacter(character, protectedPlayer)
+    local humanoid = character:WaitForChild("Humanoid", 10)
+    if not humanoid then return end
+    local lastHealth = humanoid.Health
+    if protectHealthConn then
+        protectHealthConn:Disconnect()
+    end
+    protectHealthConn = humanoid.HealthChanged:Connect(function(newHealth)
+        if not protectActive then return end
+        if newHealth < lastHealth then
+            local shooter = safeModeGuessShooter()
+            if shooter then
+                _G.AddBotLog("⚠️ Protected user shot by: " .. shooter, "warn")
+                sendChat("🔍 " .. (protectedPlayer and protectedPlayer.DisplayName or "?") .. " shot by: " .. shooter)
+                local shooterPlayer = findPlayer(shooter:lower())
+                if shooterPlayer then
+                    if shooterPlayer.Name:lower() == ownerName:lower() or shooterPlayer == LocalPlayer then
+                        _G.AddBotLog("Cannot target owner or yourself!", "warn")
+                    elseif protectedPlayer and (shooterPlayer.Name:lower() == protectedPlayer.Name:lower()) then
+                        _G.AddBotLog("Shooter is the protected user — ignore", "warn")
+                    else
+                        protectTargetName = shooterPlayer.Name
+                        _G.AddBotLog("🎯 Protect engaging: " .. shooterPlayer.Name, "info")
+                        sendChat("🔫 Protect eliminating " .. shooterPlayer.Name .. "!")
+                        equipCurrentGun()
+                        waitForCharacter()
+                        setNoclip(LocalPlayer.Character)
+                        setWallbang(true)
+                        startKill(shooterPlayer.Name)
+                    end
+                else
+                    _G.AddBotLog("⚠️ Shooter not found: " .. shooter, "warn")
+                end
+            else
+                _G.AddBotLog("⚠️ Protected user took damage — shooter unknown", "warn")
+                sendChat("⚠️ Protected user hit (shooter unknown)")
+            end
+        end
+        lastHealth = newHealth
+    end)
+end
+
+local function startProtect(userArg)
+    if not userArg or userArg == "" then
+        _G.AddBotLog("Usage: .protect playername", "warn")
+        sendChat("❌ Usage: .protect playername")
+        return
+    end
+    if userArg:lower() == "off" or userArg:lower() == "stop" then
+        stopProtect()
+        return
+    end
+    local target = findPlayer(userArg:lower())
+    if not target then
+        _G.AddBotLog("Player not found: " .. userArg, "warn")
+        sendChat("❌ Player " .. userArg .. " not found")
+        return
+    end
+    if target == LocalPlayer then
+        _G.AddBotLog("Cannot protect bot itself — use .safe on for owner-style", "warn")
+        sendChat("❌ Cannot protect bot. Use .safe on for owner.")
+        return
+    end
+    -- restart clean
+    if protectActive then
+        stopProtect()
+        task.wait(0.15)
+    end
+    protectActive = true
+    protectTargetName = ""
+    _G.AddBotLog("Protect enabled for: " .. target.Name .. " (" .. target.DisplayName .. ")", "info")
+    sendChat("🛡️ Protecting " .. target.DisplayName .. "!")
+    waitForCharacter()
+    task.wait(0.3)
+    equipCurrentGun()
+    setNoclip(LocalPlayer.Character)
+    if target.Character then
+        protectWatchCharacter(target.Character, target)
+    end
+    if protectCharConn then protectCharConn:Disconnect() end
+    protectCharConn = target.CharacterAdded:Connect(function(char)
+        if protectActive then
+            protectWatchCharacter(char, target)
+        end
+    end)
+    if protectPlayerConn then protectPlayerConn:Disconnect() end
+    protectPlayerConn = Players.PlayerRemoving:Connect(function(plr)
+        if protectActive and plr == target then
+            _G.AddBotLog("Protected user left — protect stopped", "warn")
+            sendChat("⚠️ Protected user left. Protect OFF.")
+            stopProtect()
+        end
+    end)
+end
+
 local function stopSafeMode()
     safeModeActive = false
     stopKill()
@@ -1922,6 +2075,19 @@ local function onPlayerChatted(player, message)
         startSafeMode()
     elseif msg == ".safe off" then
         stopSafeMode()
+    elseif msg:match("^%.protect%s+(.+)$") then
+        local nameArg = msg:match("^%.protect%s+(.+)$")
+        startProtect(nameArg)
+    elseif msg == ".protect off" or msg == ".protect stop" then
+        stopProtect()
+    elseif msg == ".bullet tp on" or msg == ".bullettp on" or msg == ".btp on" then
+        bulletTpEnabled = true
+        _G.AddBotLog("Bullet TP ON — aim returns target position", "info")
+        sendChat("💥 Bullet TP ON!")
+    elseif msg == ".bullet tp off" or msg == ".bullettp off" or msg == ".btp off" then
+        bulletTpEnabled = false
+        _G.AddBotLog("Bullet TP OFF", "info")
+        sendChat("🛑 Bullet TP OFF!")
     end
 end
 for _, player in ipairs(Players:GetPlayers()) do
@@ -1938,11 +2104,12 @@ _G.AddBotLog("Gun Mode: " .. currentGunMode .. " (Use .gm Revolver/Shotgun to sw
 _G.AddBotLog("No Cooldown (Full Auto) Active", "info")
 _G.AddBotLog("Protected: Cannot target owner or self", "info")
 _G.AddBotLog("Fast Orbit System Active (Height: -20)", "info")
-_G.AddBotLog("Commands: .hide | .stompall on/off | .s | .reset | .fling aura | .f | .kill | .bring | .summon | .gm | .safe on/off", "info")
+_G.AddBotLog("Commands: .hide | .stompall on/off | .s | .reset | .fling aura | .f | .kill | .bring | .summon | .gm | .safe on/off | .protect | .bullet tp on/off", "info")
 sendChat("✅ Bot loaded! Owner: " .. ownerName)
 sendChat("🔫 Gun mode: " .. currentGunMode .. " | .gm Revolver/Shotgun")
 sendChat("🛡️ Protected: Cannot target owner or self")
 sendChat("👟 .stompall on/off - Auto stomp all downed players")
+sendChat("🛡️ .protect user | .bullet tp on/off")
 workspace.FallenPartsDestroyHeight = -50000
 local function SetupAntiVoid(char)
     task.spawn(function()
